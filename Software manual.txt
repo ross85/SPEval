@@ -36,6 +36,7 @@ Parameters:
 - wd:              working directory that contains the two R files
 - structureFile:   file that contains the structure (is-a and part-of relationships)
 - parametersFile:  file that contains the parameters for all the services
+- adaptationsFile: file that contains the adaptation costs for all the CEq
 - nDesignStages:   maximum design stage of the service design process
 - effortRange:     effort range to consider, can be a single value or an array of values
 - depth:           depth for the branch and bound algorithm; see the lpSolveAPI documentation
@@ -60,7 +61,7 @@ The problems prefix are:
 Input:
 **********************************
 
-The input of the proposed algorithm is composed of two different files in comma-separated values format: the parameters file and the structure file.
+The input of the proposed algorithm is composed of three different files in comma-separated values format: the parameters file, the structure file and the adaptations file.
 
 The parameters file contains one row for each service; parameters are expressed in the following columns:
 - id:                simple numeric identifier of the services
@@ -68,12 +69,17 @@ The parameters file contains one row for each service; parameters are expressed 
 - PEq:               id of the set of equivalent services to which the service belongs in the production lines
 - name:              name of the service
 - cds:               current design stage of the service
+- type:              type of the service, elementary (E) or composed (C); not used by the tool
 - ef1,...,ef5:       effort (expressed in person/hours) required to cover design stage 1..5
 
 The structure file contains one row for each relationship between services; each relationship is described with three values:
 - parent: identifier of the parent of the current relationship
 - child:  identifier of the child of the current relationship
 - type:   type of the current relationship (is-a or part-of)
+
+The adaptations file contains one row for each CEq with adaptation costs; parameters are expressed in the following columns:
+- CEq:               id of the set of equivalent services
+- ac1,...,ac5:       effort (expressed in person/hours) required to cover design stage 1..5 for the specified CEq
 
 
 **********************************

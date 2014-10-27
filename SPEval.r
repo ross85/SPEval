@@ -23,9 +23,10 @@ rm(list = ls())
 ##################################
 # PARAMETERS
 ##################################
-wd <- '/Users/Marco/Desktop/ServiceReuse'
-structureFile 				<- './data/CaseStudy_S.csv'
-parametersFile 				<- './data/CaseStudy_P.csv'
+wd							<- '/Users/Marco/Desktop/SPEval'
+structureFile 				<- './data/Case1_S.csv'
+parametersFile 				<- './data/Case1_P.csv'
+adaptationsFile				<- './data/Case1_A.csv'
 backwardExe					<- TRUE
 forwardExe					<- TRUE
 productionLinesExe			<- TRUE
@@ -45,9 +46,7 @@ savingsAnyLpFile			<- './problem/savingsAnyProblem.lp'
 savingsAnyLogFile 			<- './log/savingsAnyLog.txt'
 savingsAnyOutputFile		<- './output/savingsAnyOutput.txt'
 nDesignStages				<- 5
-
-
-effortRange					<- seq(0,1000,10)
+effortRange					<- 0:300
 depth						<- -50
 timeout						<- 200
 
@@ -58,18 +57,20 @@ source('./Functions.r')
 ##################################
 # READ DATA AND CREATE MODEL
 ##################################
-productionLinesRawData	<- readData(structureFile,parametersFile,nDesignStages)
+productionLinesRawData	<- readData(structureFile,parametersFile,adaptationsFile,nDesignStages)
 productionLinesData <- getClassStructure(productionLinesRawData$structure,productionLinesRawData$parameters,'PEq',nDesignStages)
-portfolioData <- getClassStructure(productionLinesData$structure,productionLinesData$parameters,'CEq',nDesignStages)
+portfolioData <- getClassStructure(productionLinesData$structure,productionLinesData$parameters,'CEq',nDesignStages,productionLinesRawData$adaptations)
 cat('############################################\n')
 cat('Production lines:\n')
 cat('############################################\n')
-print(productionLinesData)
+# print without service descriptions and structure
+print(productionLinesData$parameters[,-c(4,22)])
 cat('\n\n')
 cat('############################################\n')
 cat('Portfolio:\n')
 cat('############################################\n')
-print(portfolioData)
+# print without service descriptions and structure
+print(portfolioData$parameters[,-c(4,22)])
 cat('\n\n')
 
 

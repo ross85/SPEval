@@ -21,11 +21,12 @@
 # readData:
 #	read data from structureFile and parametersFile
 ###############################################################################
-readData <- function(structureFile,parametersFile,nDesignStages) {
+readData <- function(structureFile,parametersFile,adaptationsFile,nDesignStages) {
 
 	# read data
 	structureFileContent <- read.table(structureFile,sep=',',header=TRUE,quote = "\"",stringsAsFactors=FALSE,dec = ".")
 	parametersFileContent <- read.table(parametersFile,sep=',',header=TRUE,quote = "\"",stringsAsFactors=FALSE,dec = ".")
+	adaptationsFileContent <- read.table(adaptationsFile,sep=',',header=TRUE,quote = "\"",stringsAsFactors=FALSE,dec = ".")
 	
 	# expand is-a relation
 	structure <- structureFileContent[which(structureFileContent[["type"]]=='part-of'),c("parent","child")]
@@ -42,6 +43,8 @@ readData <- function(structureFile,parametersFile,nDesignStages) {
 
 	parameters <- parametersFileContent[order(parametersFileContent[["id"]]),]
 	nServices <- length(parameters[["id"]])
+	
+	adaptations <- adaptationsFileContent[order(adaptationsFileContent[["CEq"]]),]
 
 	# validation
 	validation(structure,parameters,'InputData')
@@ -49,11 +52,13 @@ readData <- function(structureFile,parametersFile,nDesignStages) {
 	# add metadata
 	parameters[["count"]] <- 1
 	parameters[,paste("sav",1:nDesignStages,sep="")] <- 0
+	parameters[,paste("ac",1:nDesignStages,sep="")] <- 0
 	parameters[["aggName"]] <- parameters[["name"]]
 
 	returnObj <- list()
 	returnObj[["structure"]] <- structure
 	returnObj[["parameters"]] <- parameters
+	returnObj[["adaptations"]] <- adaptations
 	
 	return(returnObj)
 }
@@ -137,12 +142,13 @@ getAm <- function(children,parents,services) {
 # getClassStructure:
 #	replace equivalent services with the service that has the highest cds
 ###############################################################################
-getClassStructure <- function(structure,parameters,classInUse,nDesignStages) {
+getClassStructure <- function(structure,parameters,classInUse,nDesignStages,adaptations) {
 
 	#parameters[,paste("sav",1:nDesignStages,sep="")] <- 0
 
 	for (class in unique(parameters[[classInUse]])) {
-		eqServ <- parameters[which(parameters[[classInUse]]==class),"id"]
+		rows <- which(parameters[[classInUse]]==class)
+		eqServ <- parameters[rows,"id"]
 		
 		if (length(eqServ) > 1) {
 			maxCds <- which.max(parameters[which(parameters[[classInUse]]==class),"cds"])
@@ -162,8 +168,9 @@ getClassStructure <- function(structure,parameters,classInUse,nDesignStages) {
 			for (l in 1:nDesignStages) {
 				lessCds <- which(parameters[otherRows,"cds"] < l)
 				if (length(lessCds) > 0) {
-					parameters[maxRow,paste("sav",l,sep="")] <- parameters[maxRow,paste("sav",l,sep="")]+
-						sum(parameters[otherRows[lessCds],paste("ef",l,sep="")])	
+					parameters[maxRow,paste("sav",l,sep="")] <- 
+						sum(parameters[rows,paste("sav",l,sep="")])+
+						sum(parameters[otherRows[lessCds],paste("ef",l,sep="")])
 				}
 			}
 			
@@ -172,6 +179,19 @@ getClassStructure <- function(structure,parameters,classInUse,nDesignStages) {
 		}
 	}
 	structure <- unique(structure)
+	
+	# adaptations
+	if (!missing(adaptations)) {
+		for (class in unique(parameters[[classInUse]])) {
+			paramtersRow <- which(parameters[[classInUse]]==class)
+			adaptationsRow <- which(adaptations[[classInUse]]==class)
+			if(length(adaptationsRow)>0) {
+				for (l in 1:nDesignStages) {
+					parameters[paramtersRow,paste("ac",l,sep="")] <- adaptations[adaptationsRow,paste("ac",l,sep="")]
+				}
+			}
+		}
+	}
 	
 	# validation
 	validation(structure,parameters,classInUse)
@@ -189,16 +209,21 @@ getClassStructure <- function(structure,parameters,classInUse,nDesignStages) {
 ###############################################################################
 assessment <- function(parameters,nDesignStages,type) {
 	effort <- 0
+	ac <- 0
 	for (i in 1:nrow(parameters)) {
 		if (parameters[["cds"]][i] > 0) {
 			for (j in 1:parameters[["cds"]][i]) {
 				effort <- effort + parameters[[paste("ef",j,sep="")]][i]
+				ac <- ac + parameters[[paste("ac",j,sep="")]][i]
 			}
 		}
 	}
-	if (type == 'forward')
+	if (type == 'forward') {
 		effort <- sum(parameters[,paste("ef",1:nDesignStages,sep="")]) - effort
-	return(effort)
+		ac <- sum(parameters[,paste("ac",1:nDesignStages,sep="")])
+	}
+	totalEffort <- effort + ac
+	return(totalEffort)
 }
 
 ###############################################################################
@@ -262,7 +287,10 @@ createModel <- function(structure,parameters,lpProblemFile,nDesignStages,depth,t
 			effortConstraint[idxToSetZero+(l-1)*nServices] <- 0
 			cdsConstraint[idxToSetZero+(l-1)*nServices] <- 1
 		}
+		
+		effortConstraint[idx+(l-1)*nServices] <- effortConstraint[idx+(l-1)*nServices] + as.numeric(parameters[[paste("ac",l,sep="")]])
 	}
+	cdsConstraint[cdsConstraint==1] <- cdsConstraint[cdsConstraint==1] - (effortConstraint[cdsConstraint==1]>0)
 
 	f_con_full <- rbind(f_con_full,"cds"=cdsConstraint)
 	f_con_full <- rbind(f_con_full,"effort"=effortConstraint)
@@ -283,14 +311,16 @@ createModel <- function(structure,parameters,lpProblemFile,nDesignStages,depth,t
 		f_obj[1:nServices+(nDesignStages-1)*nServices] <- parameters[["count"]]
 	}
 	if (type == 'savingsMax') {
-		f_obj[1:nServices+(nDesignStages-1)*nServices] <- rowSums(parameters[paste("sav",1:nDesignStages,sep="")])
+		f_obj[1:nServices+(nDesignStages-1)*nServices] <- rowSums(parameters[paste("sav",1:nDesignStages,sep="")]) - 
+															rowSums(parameters[paste("ac",1:nDesignStages,sep="")])
 	}
 	if (type == 'savingsAny') {	
 		for (l in 1:nDesignStages) {
-			f_obj[1:nServices+(l-1)*nServices] <- parameters[[paste("sav",l,sep="")]]
+			f_obj[1:nServices+(l-1)*nServices] <- parameters[[paste("sav",l,sep="")]]-parameters[[paste("ac",l,sep="")]]
 		}
 	}
 	
+	# clean objective function, without the normalization weigth
 	f_obj_out <- f_obj
 	
 	# add a little negative weight proportional to the effort
